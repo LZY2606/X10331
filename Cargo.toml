@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "svd-rs",
+    "svd-parser",
+    "svd-encoder",
+    "tests",
+]
+resolver = "3"

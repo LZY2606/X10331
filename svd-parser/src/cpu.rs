@@ -1,0 +1,53 @@
+use super::*;
+use crate::svd::{Cpu, Endian};
+use crate::types::BoolParse;
+
+impl Parse for Cpu {
+    type Object = Self;
+    type Error = SVDErrorAt;
+    type Config = Config;
+
+    fn parse(tree: &Node, config: &Config) -> Result<Self, Self::Error> {
+        if !tree.has_tag_name("cpu") {
+            return Err(SVDError::NotExpectedTag("cpu".to_string()).at(tree.id()));
+        }
+
+        // Vendor systick is required by ARM targets, but not others
+        // So for others we just default to false if not provided
+        let has_vendor_systick = match tree.get_child_bool("vendorSystickConfig") {
+            Ok(v) => v,
+            Err(e) if config.target == Target::CortexM => return Err(e),
+            _ => false,
+        };
+
+        let has_mpu_present = match tree.get_child_bool("mpuPresent") {
+            Ok(v) => v,
+            _ => false,
+        };
+
+        let has_fpu_present = match tree.get_child_bool("fpuPresent") {
+            Ok(v) => v,
+            _ => false,
+        };
+
+        Cpu::builder()
+            .name(tree.get_child_text("name")?)
+            .revision(tree.get_child_text("revision")?)
+            .endian(Endian::parse(&tree.get_child_elem("endian")?, config)?)
+            .mpu_present(has_mpu_present)
+            .fpu_present(has_fpu_present)
+            .fpu_double_precision(optional::<BoolParse>("fpuDP", tree, &())?)
+            .dsp_present(optional::<BoolParse>("dspPresent", tree, &())?)
+            .icache_present(optional::<BoolParse>("icachePresent", tree, &())?)
+            .dcache_present(optional::<BoolParse>("dcachePresent", tree, &())?)
+            .itcm_present(optional::<BoolParse>("itcmPresent", tree, &())?)
+            .dtcm_present(optional::<BoolParse>("dtcmPresent", tree, &())?)
+            .vtor_present(optional::<BoolParse>("vtorPresent", tree, &())?)
+            .nvic_priority_bits(tree.get_child_u32("nvicPrioBits")?)
+            .has_vendor_systick(has_vendor_systick)
+            .device_num_interrupts(optional::<u32>("deviceNumInterrupts", tree, &())?)
+            .sau_num_regions(optional::<u32>("sauNumRegions", tree, &())?)
+            .build(config.validate_level)
+            .map_err(|e| SVDError::from(e).at(tree.id()))
+    }
+}
